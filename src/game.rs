@@ -1,7 +1,8 @@
 use piston_window::types::Color;
 use piston_window::*;
-use serde_json::Value;
+use serde_json::{Result, Value};
 use std::fs;
+use std::process;
 
 use rand::{thread_rng, Rng};
 
@@ -13,9 +14,6 @@ const FOOD_COLOR: Color = [0.94, 0.14, 0.23, 1.0];
 const BORDER_COLOR: Color = [0.9, 0.9, 0.9, 1.0];
 const GAME_OVER_COLOR: Color = [0.90, 0.00, 0.00, 0.3];
 
-const MOVING_PERIOD: f64 = 0.1;
-const RESTART_TIME: f64 = 1.0;
-
 pub struct Game {
     snake: Snake,
     food_exists: bool,
@@ -25,23 +23,57 @@ pub struct Game {
     height: i32,
     game_over: bool,
     waiting_time: f64,
+    moving_period: f64,
+    restart_time: f64,
 }
 
 impl Game {
     // impl function
     // function to initiate a new game
     pub fn new(width: i32, height: i32) -> Game {
-
         // =========================================================
-        // Reading the config variables
-        // let contents: &str = fs::read_to_string("./config.json")
-        //     .expect("Should have been able to read the file !!");
-        // let v: Value = serde_json::from_str(contents)?;
+        // Reading the config variables & If config file is read successfully we init the game
+        let config_path = "./config.json";
+        match fs::read_to_string(config_path) {
+            Ok(file_contents) => {
+                let file_contents_str: &str = &file_contents;
+                let parsed: Result<Value> = serde_json::from_str(&file_contents_str);
 
-        // println!("moving_period : {}" , v["moving_period"]);
-        // println!("restart_time : {}" , v["restart_time"]);
-        // println!("food_exists : {}" , v["food_exists"]);
-        // =========================================================
+                match parsed {
+                    Ok(config) => {
+                        let food_exists = config["food_exists"].as_bool().unwrap_or(true);
+                        let moving_period = config["moving_period"].as_f64().unwrap_or(0.1);
+                        let restart_time = config["restart_time"].as_f64().unwrap_or(1.0);
+
+                        println!("Food exists: {}", food_exists);
+                        println!("Moving period: {}", moving_period);
+                        println!("Restart time: {}", restart_time);
+
+                        return Game {
+                            snake: Snake::new(2, 2),
+                            waiting_time: 0.0,
+                            food_exists,
+                            food_x: 6,
+                            food_y: 4,
+                            width,
+                            height,
+                            game_over: false,
+                            moving_period,
+                            restart_time,
+                        };
+                    }
+                    Err(err) => {
+                        eprintln!("Error parsing JSON: {}", err);
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("Error reading file: {}", err);
+            }
+        }
+        // Exiting the process here
+        // ------------------------
+        Game::exit();
 
         Game {
             snake: Snake::new(2, 2),
@@ -52,7 +84,10 @@ impl Game {
             width,
             height,
             game_over: false,
+            moving_period: 0.5,
+            restart_time: 1.0,
         }
+        // =========================================================
     }
 
     // impl function
@@ -101,7 +136,7 @@ impl Game {
         self.waiting_time += delta_time;
 
         if self.game_over {
-            if self.waiting_time > RESTART_TIME {
+            if self.waiting_time > self.restart_time {
                 self.restart();
             }
             return;
@@ -111,7 +146,7 @@ impl Game {
             self.add_food();
         }
 
-        if self.waiting_time > MOVING_PERIOD {
+        if self.waiting_time > self.moving_period {
             self.update_snake(None);
         }
     }
@@ -178,5 +213,11 @@ impl Game {
         self.food_x = 6;
         self.food_y = 4;
         self.game_over = false;
+    }
+
+    // impl function
+    // function to restart the game
+    fn exit() {
+        process::exit(1);
     }
 }
