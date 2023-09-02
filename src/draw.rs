@@ -1,5 +1,5 @@
 use piston_window::types::Color;
-use piston_window::{rectangle, text, Context, G2d, Glyphs, TextureSettings};
+use piston_window::{rectangle, Context, G2d};
 
 // Constant block size
 const BLOCK_SIZE: f64 = 25.0;
@@ -62,14 +62,3 @@ pub fn draw_rectangle(
         g,
     );
 }
-
-// pub fn draw_test(color: Color, font_size: u32, content: &str, con: &Context, g: &mut G2d) {
-//     let mut glyphs = Glyphs::new(
-//         "assets/FiraSans-Regular.ttf",
-//         con.window.factory.clone(),
-//         TextureSettings::new(),
-//     )
-//     .unwrap();
-
-//     text(color, font_size, content, &mut glyphs, con.transform, g);
-// }

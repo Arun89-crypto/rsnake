@@ -2,6 +2,7 @@ use piston_window::types::Color;
 use piston_window::*;
 use serde_json::{Result, Value};
 use std::fs;
+use std::io::Read;
 use std::process;
 
 use rand::{thread_rng, Rng};
@@ -14,6 +15,9 @@ const FOOD_COLOR: Color = [0.94, 0.14, 0.23, 1.0];
 const BORDER_COLOR: Color = [0.9, 0.9, 0.9, 1.0];
 const GAME_OVER_COLOR: Color = [0.90, 0.00, 0.00, 0.3];
 
+const CONFIG_PATH: &str = "./config.json";
+const SCORE_PATH: &str = "./score.txt";
+
 pub struct Game {
     snake: Snake,
     food_exists: bool,
@@ -25,6 +29,8 @@ pub struct Game {
     waiting_time: f64,
     moving_period: f64,
     restart_time: f64,
+    score: i32,
+    game_score: i32,
 }
 
 impl Game {
@@ -33,8 +39,7 @@ impl Game {
     pub fn new(width: i32, height: i32) -> Game {
         // =========================================================
         // Reading the config variables & If config file is read successfully we init the game
-        let config_path = "./config.json";
-        match fs::read_to_string(config_path) {
+        match fs::read_to_string(CONFIG_PATH) {
             Ok(file_contents) => {
                 let file_contents_str: &str = &file_contents;
                 let parsed: Result<Value> = serde_json::from_str(&file_contents_str);
@@ -45,30 +50,51 @@ impl Game {
                         let moving_period = config["moving_period"].as_f64().unwrap_or(0.1);
                         let restart_time = config["restart_time"].as_f64().unwrap_or(1.0);
 
+                        println!("===================[GAME CONFIG]===================");
                         println!("Food exists: {}", food_exists);
                         println!("Moving period: {}", moving_period);
                         println!("Restart time: {}", restart_time);
+                        println!("===================================================");
 
-                        return Game {
-                            snake: Snake::new(2, 2),
-                            waiting_time: 0.0,
-                            food_exists,
-                            food_x: 6,
-                            food_y: 4,
-                            width,
-                            height,
-                            game_over: false,
-                            moving_period,
-                            restart_time,
-                        };
+                        match fs::read_to_string(SCORE_PATH) {
+                            Ok(score) => {
+                                return Game {
+                                    snake: Snake::new(2, 2),
+                                    waiting_time: 0.0,
+                                    food_exists,
+                                    food_x: 6,
+                                    food_y: 4,
+                                    width,
+                                    height,
+                                    game_over: false,
+                                    moving_period,
+                                    restart_time,
+                                    score: score.parse::<i32>().unwrap_or(0),
+                                    game_score: 0,
+                                };
+                            }
+                            Err(err) => {
+                                eprintln!("Error parsing score.txt file | Either score.txt file doesn't exist: {}", err);
+                            }
+                        }
                     }
                     Err(err) => {
-                        eprintln!("Error parsing JSON: {}", err);
+                        eprintln!(
+                            "Error parsing JSON | Either config.json params are not correct sample file [{{
+  'food_exists': true,
+  'moving_period': 0.1,
+  'restart_time': 1.0
+}}] : {}",
+                            err
+                        );
                     }
                 }
             }
             Err(err) => {
-                eprintln!("Error reading file: {}", err);
+                eprintln!(
+                    "Error reading file | Either config.json file doesn't exist: {}",
+                    err
+                );
             }
         }
         // Exiting the process here
@@ -86,6 +112,8 @@ impl Game {
             game_over: false,
             moving_period: 0.5,
             restart_time: 1.0,
+            score: 0,
+            game_score: 0,
         }
         // =========================================================
     }
@@ -158,6 +186,7 @@ impl Game {
         if self.food_exists && self.food_x == head_x && self.food_y == head_y {
             self.food_exists = false;
             self.snake.restore_tail();
+            self.game_score += 1;
         }
     }
 
@@ -207,12 +236,66 @@ impl Game {
     // impl function
     // function to restart the game
     fn restart(&mut self) {
-        self.snake = Snake::new(2, 2);
-        self.waiting_time = 0.0;
-        self.food_exists = true;
-        self.food_x = 6;
-        self.food_y = 4;
-        self.game_over = false;
+        match self.update_score() {
+            Ok(()) => {
+                self.snake = Snake::new(2, 2);
+                self.waiting_time = 0.0;
+                self.food_exists = true;
+                self.food_x = 6;
+                self.food_y = 4;
+                self.game_over = false;
+                self.game_score = 0;
+            }
+            Err(err) => {
+                eprintln!("Some error while updting the score : {}", err);
+
+                self.snake = Snake::new(2, 2);
+                self.waiting_time = 0.0;
+                self.food_exists = true;
+                self.food_x = 6;
+                self.food_y = 4;
+                self.game_over = false;
+                self.game_score = 0;
+            }
+        }
+    }
+
+    fn update_score(&mut self) -> std::io::Result<()> {
+        let _score = self.game_score;
+
+        println!("===================[SCOREBOARD]===================");
+        println!("Current Game Score : {}", self.game_score);
+        println!("High Score : {}", self.score);
+        println!("==================================================");
+
+        if self.score < _score {
+            match fs::File::open(SCORE_PATH) {
+                Ok(mut file) => {
+                    let mut contents = String::new();
+                    file.read_to_string(&mut contents)?;
+                    let _score_str = _score.to_string();
+                    match fs::write(SCORE_PATH, _score_str) {
+                        Ok(()) => {}
+                        Err(err) => {
+                            eprintln!(
+                            "Error writing score.txt file | Either score.txt file doesn't exist: {}",err
+                            );
+                        }
+                    }
+                    self.score = _score;
+                }
+                Err(err) => {
+                    eprintln!(
+                        "Error parsing score.txt file | Either score.txt file doesn't exist: {}",
+                        err
+                    );
+                }
+            }
+        } else {
+            println!("Not Enough Score !!!");
+        }
+
+        return Ok(());
     }
 
     // impl function
